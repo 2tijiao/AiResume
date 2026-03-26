@@ -8,6 +8,11 @@ spring:
     password: 123456
     driver-class-name: org.postgresql.Driver
 
+  redis:
+    host: 192.168.252.128
+    port: 6379
+    password: 123456
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -19,3 +24,7 @@ spring:
 app:
   upload:
     path: D:/JavaProject/AiProject/uploads
+  ai:
+    base-url: https://api-inference.modelscope.cn/v1
+    api-key: ms-29460bb8-c453-4cbb-831b-2960aebbe3a5
+    model: Qwen/Qwen3.5-27B
