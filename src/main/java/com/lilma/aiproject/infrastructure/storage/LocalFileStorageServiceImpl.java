@@ -41,4 +41,16 @@ public class LocalFileStorageServiceImpl implements LocalFileStorageService{
         if(fileName==null||!fileName.contains("."))return "";
         return fileName.substring(fileName.lastIndexOf("."));
     }
+
+    @Override
+    public void delete(String filePath) {
+        if(filePath==null||filePath.trim().isEmpty())return;
+
+        File file=new File(filePath);
+        //先判断是否真的存在在磁盘，以防数据库和磁盘不一致
+        if(file.exists()&&file.isFile()){
+            boolean deleted=file.delete();
+            if(!deleted)throw new RuntimeException("文件删除失败："+filePath);
+        }
+    }
 }

@@ -1,21 +1,25 @@
 package com.lilma.aiproject.modules.resume.service.impl;
 
+import com.lilma.aiproject.common.constant.ResumeStatusConstants;
 import com.lilma.aiproject.common.exception.BusinessException;
 import com.lilma.aiproject.common.util.HashUtils;
 import com.lilma.aiproject.infrastructure.ai.ResumeAiAnalyzer;
 import com.lilma.aiproject.infrastructure.parser.DocumentParser;
 import com.lilma.aiproject.infrastructure.parser.TikaDocumentParser;
+import com.lilma.aiproject.infrastructure.queue.ResumeAnalyzeTaskProducer;
 import com.lilma.aiproject.infrastructure.storage.LocalFileStorageService;
 import com.lilma.aiproject.modules.resume.dto.CreateResumeRequest;
 import com.lilma.aiproject.modules.resume.entity.Resume;
 import com.lilma.aiproject.modules.resume.repository.ResumeRepository;
 import com.lilma.aiproject.modules.resume.service.ResumeService;
+import com.lilma.aiproject.modules.resume.vo.ResumeListItemVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class ResumeServiceImpl implements ResumeService {
@@ -26,7 +30,7 @@ public class ResumeServiceImpl implements ResumeService {
     @Autowired
     private DocumentParser documentParser;
     @Autowired
-    private ResumeAiAnalyzer resumeAiAnalyzer;
+    private ResumeAnalyzeTaskProducer resumeAnalyzeTaskProducer;
 
     @Override
     public Resume create(CreateResumeRequest request) {
@@ -39,21 +43,25 @@ public class ResumeServiceImpl implements ResumeService {
     }
 
     @Override
-    public Resume analyze(Long id) {
+    public void analyze(Long id) {
         Resume resume = getById(id);
         if(resume.getResumeText()==null||resume.getResumeText().trim().isEmpty()){
             throw new BusinessException("简历内容为空，无法分析，id="+id);
         }
 
-        //建立正确的状态模型，和后面实现异步化时状态流转保持一致
-        resume.setStatus("PROCESSING");
+        //防止重复提交
+        if(ResumeStatusConstants.PENDING.equals(resume.getStatus())||ResumeStatusConstants.PROCESSING.equals(resume.getStatus())){
+            throw new BusinessException("该简历正在分析中，请勿重复提交，id="+id);
+        }
+
+        //已提交等待处理
+        resume.setStatus(ResumeStatusConstants.PENDING);
+        //如果有之前处理失败的重新分析需要把错误原因清空
+        resume.setFailReason(null);
+        resume.setAnalysisResult(null);
         resumeRepository.save(resume);
 
-        String analysisResult=resumeAiAnalyzer.analyze(resume.getResumeText());
-        resume.setAnalysisResult(analysisResult);
-        resume.setStatus("COMPLETED");
-
-        return resumeRepository.save(resume);
+        resumeAnalyzeTaskProducer.send(id);
     }
 
     @Override
@@ -107,7 +115,39 @@ public class ResumeServiceImpl implements ResumeService {
     }
 
     @Override
-    public List<Resume> list() {
-        return resumeRepository.findAll();
+    public List<ResumeListItemVO> list() {
+        return resumeRepository.findAll()
+                .stream()
+                .map(this::toListItemVO)
+                .collect(Collectors.toList());
+    }
+    //类型转换
+    private ResumeListItemVO toListItemVO(Resume resume){
+        ResumeListItemVO vo=new ResumeListItemVO();
+        vo.setId(resume.getId());
+        vo.setFileName(resume.getFileName());
+        vo.setStatus(resume.getStatus());
+        vo.setRetryCount(resume.getRetryCount());
+        vo.setCreatedAt(resume.getCreatedAt());
+        vo.setUpdatedAt(resume.getUpdatedAt());
+        vo.setResumeTextPreview(buildPreview(resume.getResumeText(), 100));
+        vo.setAnalysisResultPreview(buildPreview(resume.getAnalysisResult(), 120));
+        return vo;
+    }
+    //获取预览数据
+    private String buildPreview(String text,int maxLength){
+        if(text==null||text.trim().isEmpty())return null;
+
+        //将换行以及多个换行、制表符都清洗为普通空格
+        String normalized=text.replaceAll("\\s+"," ").trim();
+        if(normalized.length()<=maxLength)return normalized;
+        return normalized.substring(0,maxLength)+"...";
+    }
+
+    @Override
+    public void delete(Long id) {
+        Resume resume = getById(id);
+        localFileStorageService.delete(resume.getFilePath());
+        resumeRepository.delete(resume);
     }
 }

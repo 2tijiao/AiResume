@@ -1,5 +1,6 @@
 package com.lilma.aiproject.modules.resume.entity;
 
+import com.lilma.aiproject.common.constant.ResumeStatusConstants;
 import lombok.Data;
 
 import javax.persistence.*;
@@ -55,7 +56,7 @@ public class Resume {
         this.createdAt = now;
         this.updatedAt = now;
         if (this.status == null) {
-            this.status = "PENDING";
+            this.status = ResumeStatusConstants.PENDING;
         }
         if (this.retryCount == null) {
             this.retryCount = 0;

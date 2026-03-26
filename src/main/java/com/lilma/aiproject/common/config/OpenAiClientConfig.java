@@ -1,0 +1,17 @@
+package com.lilma.aiproject.common.config;
+
+import com.openai.client.OpenAIClient;
+import com.openai.client.okhttp.OpenAIOkHttpClient;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class OpenAiClientConfig {
+    @Bean
+    public OpenAIClient openAIClient(AiProperties aiProperties){
+        return OpenAIOkHttpClient.builder()
+                .apiKey(aiProperties.getApiKey())
+                .baseUrl(aiProperties.getBaseUrl())
+                .build();
+    }
+}
